@@ -1,0 +1,26 @@
+\begin{table}[H]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\scriptsize
+\begin{tabularx}{0.9\linewidth}{p{3.7cm} Y Y Y Y}
+\hline\hline
+                    &\multicolumn{4}{c}{Dependent variable: log(employees)}                                                       \\\cmidrule(lr){2-5}
+                    &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}        &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         \\
+                    & Full sample         & Full sample             &   Rating$\geq$4         &    Rating$<$4         \\
+\hline
+Tourist*Post        &       0.043\sym{***}&       0.037\sym{**} &            0.063\sym{***}&      -0.042\sym{*}  \\
+                    &     (0.011)         &     (0.015)              &     (0.023)         &     (0.024)         \\
+Restaurant FE       &$\checkmark$         &$\checkmark$               &$\checkmark$         &$\checkmark$         \\
+Month+Year FE       &$\checkmark$         &$\checkmark$             &$\checkmark$         &$\checkmark$         \\
+Neighborhood*Time&$\checkmark$         &$\checkmark$               &$\checkmark$         &$\checkmark$         \\
+Controls            &$\checkmark$         &$\checkmark$               &$\checkmark$         &$\checkmark$         \\
+Extra controls      &                     &$\checkmark$                &$\checkmark$         &$\checkmark$         \\
+\hline
+Observations        &\num{223448}         &\num{210774}             &\num{153479}         & \num{57295}         \\
+Restaurants         &        4632         &        4333                &        3186         &        1147         \\
+Clusters            &          86         &          86              &          85         &          53         \\
+Adj. R-squared      &       0.821         &       0.823               &       0.818         &       0.824         \\
+Mean Y before policy&         6.8         &         7.0              &         5.8         &        10.1         \\
+\hline\hline
+\multicolumn{5}{p{0.88\linewidth}}{\tiny Post=1 if date is after May 2017. Tourist restaurants are those with probability$\geq$1\%. Heteroskedasticity-robust standard errors clustered at municipality level. Each observation is a restaurant-month-year. Controls include (log) distance to closest attraction and (log) n. of attractions in 600m radius interacted with Post. Extra controls include: restaurant price category, indicator for Italian cuisine, indicator for TA profile managed by restaurant, n. of reviews to closest attraction, n. of restaurants in 400m radius, indicators for type of matching, main economic activity and legal status of the company. \sym{*} \(p<0.1\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)}\\
+\end{tabularx}
+\end{table}

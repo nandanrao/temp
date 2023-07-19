@@ -1,0 +1,207 @@
+\message{ !name(survey-sampling-with-ads.tex)}\documentclass[a4paper,12pt]{article}
+\usepackage[backend=biber, citestyle=authoryear, bibencoding=utf8]{biblatex}
+\addbibresource{./bibs/adaptive-sampling.bib}
+\addbibresource{./bibs/survey-methodology.bib}
+
+\usepackage{amsmath, amsthm, amsfonts, mathtools, csquotes, bm, centernot, bbm, multirow}
+\usepackage[toc,page]{appendix}
+
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+
+\theoremstyle{proposition}
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{prop}{Proposition}
+
+\usepackage{pgf, tikz}
+\usetikzlibrary{arrows, automata}
+
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator*{\argmin}{argmin}
+\title{Continuous Survey Sample Optimization Using Ad Platform APIs}
+
+
+\begin{document}
+
+\message{ !name(survey-sampling-with-ads.tex) !offset(-3) }
+
+\maketitle
+
+\begin{abstract}
+By reaching billions of people everyday, digital Ad platforms such as Google, Facebook and Instagram offer researchers and advertisers unprecedented opportunities to gather survey responses and conduct experiments entirely online. Researchers have successfully gathered “convenience samples” by creating ads for targetable populations. However, by manually creating these ads, researchers are limited to the explicit targeting criteria available on the platform as well as limited in the complexity of stratification which is feasible. We formulate the problem of dynamically setting ad budgets for survey sample collection as one of minimizing the variance of a post-stratification weighted expectation subject to budget constraints. We then show that this problem can be continuously optimized, in real-time, by building software that connects to both the APIs of the ad platforms and to the API of a survey platform. We share data from surveys conducted this way with 100,000+ people across 20 countries, optimized for post-stratification weights matching country-level demographics for age, gender, and location. In addition, we show that the same framework enables the use of advanced targeting and audience creation techniques (i.e. Lookalike Audiences on Meta) to stratify by variables not explicitly available on the platform. We share data from a survey and experiment related to malaria prevention in India where the sample was stratified by a known malaria risk-factor not explicitly available: permanent vs. non-permanent dwelling type. Using this technique, we successfully recruited a sufficient number of individuals who are at greater risk for this disease. Finally, we present the software as an open-source platform that can be deployed as a web application on public or private clouds.
+\end{abstract}
+
+\clearpage
+
+\section{Introduction}
+
+Some lighter introduction? Not everything below? Or pull some bits from below and add some things?
+
+Worth laying out the basic premise of: traditionally, poststratification weighting is a process that happens entirely ex-post. But we can assume it will happen and optimize for it in the process of collecting sample.
+
+Also worth considering the idea of being able to compute while sampling. This is a computers thing.
+
+\section{Non-probability Sampling and Poststratification}
+
+
+The traditional approach of recruiting survey participants starts with probability sampling: the entire population of interest is in the sampling frame and N individuals are selected with known probabilities. This can be contrasted with non-probability sampling, where the selection probability of individuals is unknown to the researcher. Recruiting via digital advertising is a non-probability sampling technique because the researcher does not know the probability that any individual will be shown an ad.
+
+Even in probability sampling, and even if the initial frame is perfect and selection probabilities are known, non-random nonresponse implies that survey responses are not themselves representative and thus not unbiased out-of-the-box. For this reason it can be helpful to decompose survey error into (among others) frame error and nonresponse error. Both, however, create the same problem: your sample is biased and responses must be reweighted in order to create an unbiased estimate of a population parameter (\cite{Kolenikov2016}).
+
+Reweighting methods can be separated into three categories:
+
+\begin{enumerate}
+\item Design weights. If the selection probability of each individual in the sampling frame is known, responses can be weighted by the inverse probability of selection. No external data or modeling assumptions are needed.
+
+\item Nonresponse weights. An estimated probability of nonresponse can be calculated within the survey, given the observed variables recorded in the survey. No external data is required, but the researcher must make modeling assumptions to estimate the nonresponse probability as a function of observable covariates available in the initial sampling frame.
+
+\item Poststratification weights. If external data on the population is available (e.g., census data), response weights for a subpopulation can simply be set to reflect their total proportion of the population. Techniques such as raking can be used if only marginal distributions are available in the population (\cite{Deville1992,Battaglia2009}) and techniques such as multilevel regression and poststratification (MRP) can be used if the number of variables, and hence subpopulations, is large \parencite{Gelman1997}. These techniques do not require known selection probabilities, only non-zero representation of all subpopulations of interest in the final survey results (and by extension, in the original sampling frame). They do require modeling assumptions over the observable covariates available both in the survey data and in the external data.
+
+\end{enumerate}
+
+
+Design weights together with nonresponse weights are sufficient to recover an estimate of the parameter of interest in the population that makes up the initial sampling frame. Alternatively, poststratification weights with external data are sufficient to estimate a parameter of interest in the population represented by the external data. If the initial sampling frame is the same as the "external data'' about your target population (i.e. both are an official government census), then the two techniques are identical.
+
+In practice, however, many surveys start with a sampling frame that is relatively representative but not very covariate-rich. This is the case with random-digit-dialing (RDD), the most common technique used by companies and organizations conducting phone surveys and a staple of opinion polling for many years. Nonresponse rates for RDD surveys have been steadily rising for decades, reaching 91\% in the 2010s (\cite{Keeter2017,Shirani-Mehr2018}). Because phone numbers do not come with demographic variables that allow for the creation of a nonresponse model, it is standard practice for these surveys to employ poststratification weighting to estimate their population parameter (\cite{Gelman1997}).
+
+What, then, is the value of a representative initial frame if nonresponse is so significant and poststratification techniques needed anyways? Can nonprobability sampling techniques with poststratification replace traditional probability-based sampling measures? If so, in what settings is this feasible and advisable?
+
+These questions have been posed by a number of researchers of late. Wang et al. \parencite*{Wang2015} applied multilevel regression and poststratification (MRP) to data from an opt-in poll that was made available on the XBox gaming platform to estimate vote share among the two primary candidates for the 2012 US presidential elections. They compare their predictions with polling averages from pollster.com and find that their predictions track the polling averages very closely and indeed even produce better results than the polls in the days running up to the election. Goel, Obeng, and Rothschild \parencite*{Goel2015} applied MRP to survey data from a sample of 1000 Amazon Mechanical Turk (AMT) workers and from 1,000 respondents collected via online survey company Pollfish to calculate mean outcomes for a variety of questions from the General Social Survey (GSS) and similar questions from surveys performed by Pew Research. They report that their calculated outcomes from AMT and Pollfish respondents have a mean-absolute deviation (MAD) from GSS/Pew benchmarks of 7.2 and 7.4 percentage points respectively, where the GSS and Pew differ from each other with a MAD of 8.6. Further research from Pew shows a similar error magnitude between online opt-in surveys with poststratification methods and their traditional phone-based survey results, reporting average deviations of 6 percentage points (\cite{Mercer2018}).
+
+What do these results imply? The GSS is a rigorous survey in which considerable time and resources are poured into creating an inclusive sampling frame and then getting responses (in-person) from each sampled individual (minimizing nonresponse), coming in at the considerable price tag of \$3 per question per respondent (\cite{Goel2015}). While there is no ground truth in the opinion questions measured in these surveys, the GSS is widely considered the best we have. Phone-based surveys from firms like Pew Research start with a significantly more representative sampling frame (all phone numbers) than the convenience samples studied (MTurkers or opt-in visitors to a set of websites/apps). Despite this advantage, it does not systematically outperform the convenience sample. This would seem to imply that either A) the magnitude of nonresponse error in those techniques overwhelms any improvement in frame error and/or B) that poststratification techniques successfully made up for a significant portion of frame error, reducing the importance of the initial frame in the resulting total survey error.
+
+Critically, however, poststratification techniques (and nonresponse modeling) require the researcher to select a set of relevant variables on which to stratify. This need to model the outcome as a function of covariates is happily absent in a pure probability-sampling method with minimal nonresponse.
+
+A simple example can help illustrate this point: imagine you are interested in surveying your city’s population to know how concerned they are about a particular global pandemic. Consider, additionally, that you collect information on respondents’ race and gender, but do not think to collect information on their age. Assume that in reality, older people are more vulnerable to this disease and thus more concerned.
+
+If you have a comprehensive sampling frame and a crack team of door-knockers (think GSS), your resulting sample (given sufficient size) will likely be representative for age and thus your lack of information about respondents’ age will not affect the estimate of the average level of concern in your city. Now consider you are running an RDD-based phone survey and it turns out that young people are much less likely to take your call. You did not collect information on age (you did not know it would matter!), so poststratification cannot make up for this nonresponse bias and you end up woefully overestimating the concern in your city. Conversely, consider you run an internet-based convenience survey in which young people are overrepresented in your sampling frame. Without information on the age of each respondent in your collected data, poststratification cannot overcome this bias.
+
+While the importance of “age” might be obvious in modeling citizens’ concern regarding a pandemic, the inclusion or exclusion of other variables might not be so obvious a priori (e.g., political affiliation or social media diet). Thus, any technique relying on poststratification implicitly brings a modeling and, in particular, a variable-selection problem. Indeed, Mercer, Lau, and Kennedy (2018) show in a comparison of poststratification techniques that what matters most for removing the bias of nonprobability samples is not the exact technique used, but rather the variables chosen. This should be a strong cautionary tale to anyone who thinks they have a representative sample but has taken the variables required for representation as given and not chosen them based on the specific outcome. In the following section we will discuss how integrating recruitment and survey responses can allow for the variable selection problem to be formally solved in an online fashion, potentially leading to significant increases in outcome estimation accuracy.
+
+An additional disadvantage of a non-inclusive sampling frame is that, while poststratification weighting can make up for certain populations being underrepresented, it can do nothing for populations entirely absent from the sampling frame. Digital advertising, along with the other online convenience methods compared in the studies reported above, by definition exclude from their initial sampling frame everyone without internet access. This could potentially exclude very poor households entirely, as well as those of certain religious or ethical beliefs. This is a deficit that no amount of poststratification weighting can make up for.
+
+Many new studies have begun to use Facebook specifically as a recruitment tool and apply poststratification to estimate population quantities (\cite{Zagheni2017,Perrotta2020}). We are not aware, however, of any study that has systematically compared recruitment via online advertising to traditional probability-based recruitment such as RDD. We see several advantages that online advertising has as a sampling frame as opposed to other online convenience sampling methods:
+
+\begin{enumerate}
+\item Large population coverage: Facebook registers 2.7 billion active users (Statista 2020). Google Ads Display Network reports to cover 90\% of internet users worldwide across millions of websites (Google 2020).
+
+\item Targeted advertising allows researchers to intentionally pay more to reach under-represented groups. This allows researchers to trade off cost and representativeness in a way that the studied convenience methods (i.e. Xbox live players) do not allow.
+
+\item Real time communication. Digital advertisers expose APIs, which allows software run by the researcher to communicate with the advertising platform in real time and adjust ad placement. While on the one hand this makes it convenient to create hundreds of audiences for the stratified recruitment, the potential extends further. We explore this feature more in the following section, but it’s worth highlighting that it is novel, not present in traditional sampling frames or considered in any of the research on this topic that we are aware of.
+\end{enumerate}
+
+
+The combination of the last two points (targets ads controlled via API) is very powerful: it implies that we can build our own ad-optimization engine to optimize the goals of researchers, policymakers, and the public good. This does not come out-of-the-box from ad platforms, whose built-in ad optimization routines are designed to maximize value under the assumption that diversity of audience (customers) is not in-and-of-itself valuable. While this may be the case in retail, it is not the case for research. The value (information gain) of an individual decreases with the number of similar individuals we already have. This is why Virtual Lab has its own ad optimization engine that uses the available tools to optimize for heterogeneity rather than homogeneity.
+
+These additional advantages of digital advertising over the convenience-based methods studied give solid reasons to believe that results could potentially be even better for digital advertising. Future research is needed to test that hypothesis.
+
+
+\section{The math bit}
+
+
+We consider that the researcher is starting with a well-defined population of interest $P$ and would like to estimate a population parameter $Y$ via sampling and measurement.
+
+Note that measurement can be done in many ways, however, we will consider the case, without loss of generality, where measurement is performed by administering a survey to each sampled individual and the outcome is a survey respones. We will consider that the survey might be divided into one or more waves administered at different points in time.
+
+Sampling and administering the first wave of the survey will be performed by a process jointly referred to as ``recruitment''. We consider that the sampling frame to be the set of individuals that can be targeted and reached directly on digital ad platform, denoted $F$. For this technique to work, we assume that $F \cap P$.
+
+We denote an individual outcome response as $y_i$ for each individual $i$ in the sample. We do not specify which survey wave in which the outcome response is recorded. We will assume that the researcher wishes to use, as an estimator of $Y$, the stratified mean for a set of strata $h \in H$ with an assigned weight for each stratum $W_h$, which we will denote $\bar{y}$:
+
+$$
+\bar{y} := \sum_h W_h\bar{y}_h
+$$
+
+Where $\bar{y}_h$ denotes the sample mean within stratum $h$. We do not specify the motivation for the stratification or the weights. We do assume that we are able to measure a set of additional survey responses which we will consider covariates and denote $x_i \in X$. We assume the existance of a mapping $X \rightarrow H$ such that the measured covariates are sufficient to assign each individual to one and only one stratum. In addition, we assume that $x_i$ is measured during recruitment.
+
+
+% Formalize assumption F intersects P if necessary to reference later
+
+% Assume a data generating function? How to describe the assumptions behind H??
+
+
+
+% We're assuming that the variance of the estimate is equal across strata, such that we don't need to define the outcome or compute the estimate or compute the variance in the sample itself.
+
+The variance of our sample estimate is thus given by:
+$$
+\mathbb{V}[\bar{y}] =  \sum_{h}  W_h^2 \frac{s_h^2}{n_h}
+$$
+
+
+Where $s_h^2$ denotes the variance of the population parameter of interest $Y$ within stratum $h$. If the outcome was measured during recruitment, we could estimate this stratum-specific variance. We will do this in the sequal (section to be written), however, we will begin with a simplification that makes this sampling procedure more generally useful by including scenarios where the outcome response is not measured during recruitment but at a later time. We simplify the problem by assuming that the variance of the outcome in each stratum is equal $s_h^2 = s^2$. With that assumption, we have the following variance of our estimate:
+
+$$
+\mathbb{V}[\bar{y}] =  s^2  \sum_{h}  \frac{W_h^2}{n_h}
+$$
+
+Note that, given a fixed $n$, this variance is minimized when $\frac{n_h}{n} = W_h$, known as the Neyman allocation (\cite{Neyman}). If there were no friction in recruiting individuals in the sampling frame from each stratum, then the researcher would simply pick the Neyman allocation. However, in the real world, there is often friction in sampling individuals from different strata and, in particular, that friction might differ greatly across strata.
+
+In particular, we will assume that this friction is represented as a monetary cost and denote the cost to recruit an individual from stratum $h$ as $P_h$. We then assume the researcher has a fixed budget $B$ to allocate to the recruitmunt of individuals in each stratum such that $B_h = P_hn_h$. We also assume that the researcher has a desired maximum sample size that they can measure, which we will denote $n_d$. We can then frame the optimization problem of finding the best allocation of budget to minimize the variance of the final estimate as:
+
+
+\begin{align*}
+\argmin_{n_i,...,n_h}  &\sum_{h}  \frac{W_h^2}{n_h} \\
+s.t. &\sum_h P_hn_h \leq B \\
+     &\sum_h n_h \leq n_d
+\end{align*}
+
+
+Note that this problem will not necessarily have a unique solution, however, given that the variance is monotonically decreasing for each $n_h$ and the constraints both cap the maximum possible $n_h$, any minimum will result in at least one non-slack constraint. This can be used to simplify the computational search.
+
+If $P_h$ was known, then this optimization problem would allow us to determine the optimal spend per stratum $B_h$ and that spend could be allocated. However, in many real-world scenarios, $P_h$ may not be known ahead of time.
+
+We thus propose a simple algorithm to estimate the price and optimize recruitment, continuously, during an extended recruitment process. To do so we require an interface for recruitment that targets stratum $h$ and allocates budget $B_{ht}$ over a specific period of time $t$. It should be noted that digital ad platforms provide just such an interface. We denote this interface $recruit(B_{t})$ which accepts a budget allocation $B_t := \{B_{1t},...,B_{Ht}\}$.
+
+Additionally, we require an interface to collect information on the results of recruitment at time $t$ given budget $B_t$. Results should be considered as the number of respondents recruited for each stratum $h$ at time $t$ and will be denoted $n_{ht}$.
+
+Given that, we can model the inverse cost ($\frac{1}{P_h}$), the number of respondents recruited $n_{ht}$ given budget spend $B_h$  as a Poisson random variable:
+
+$$
+ ~ Poisson()
+$$
+
+If we fix a prior for the parameter X in the form of parameters of a Gamma distribution, we can use closed-form Bayesian updating to obtain a MAP estimator and the implied mean of the predictive distribution. This mean number of respondents per budget can then be used as a price directly in our optimization.
+
+The problem with this method is, of course, that we are not taking into account the uncertainty in our price estimate when we solve our optimization problem. Additionally, here we are assuming that there is a single, static price for each stratum. However, in the case of digital ad spend, our price is actually a function of the budget allocated. We leave it as a task for future work to fully model the whole system.
+
+Given these simplifying assumptions, however, we can build an extremely simple and flexible algorithm to optimize ads for recruitment:
+
+
+
+
+% Ideally, we would use the posterior estimates of the Poisson distribution for the inverse price to sample from a set of possible minimum values. %
+
+
+%
+
+
+
+
+\section{The software bit}
+
+Digital ad platforms are, by definition, software. Humans interact with software through interfaces. Often, this is a ``graphical user interface'' (GUI) such as is the case when an advertiser creates ads directly on the ad platforms website.
+
+
+
+
+[Some diagram of the software?]
+
+
+\section{Results}
+
+
+% Don't really have a counterfactual...
+% I suppose we can look at amount spent per strata, emphasizing the differences
+% But to be honest, that's pretty boring.
+%
+% It's maybe interesting to share overall costs per acquisition. Along with
+% some marginal differences, based on variables - at least gender, which
+% is comparable.
+%
+% So you'll need to pull all FB data... For all campaigns...
+%
+Results from surveys run... compile this into some nice table...
+
+
+\end{document}
+\message{ !name(survey-sampling-with-ads.tex) !offset(-207) }
